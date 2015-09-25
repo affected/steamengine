@@ -1,51 +1,39 @@
 #include <SPI.h>
 #include <Ethernet.h>
+#include <FreqMeasure.h>
+
 
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network:
 byte mac[] = {
   0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
 };
-IPAddress ip(192, 168, 1, 177);
+IPAddress ip(172, 22, 74, 93); // this is not used
 
 // Initialize the Ethernet server library
 // with the IP address and port you want to use
 // (port 80 is default for HTTP):
-EthernetServer server(80);
+EthernetServer server(80); // no we get ip from DCHP
 
-int mPin = A0;   // select the input pin for the sound sensor (microphone)
-int vPin = A1;   // select the input pin for the vibration sensor
-int mValue = 0;  // variable to store the analogic value coming from the sound sensor
-int vValue = 0;  // variable to store the analogic value coming from the vibration sensor
-int mVal = 0;    // define numeric variables val
-int vVal = 0;    // define numeric variables val
-int mmin = 2000; // sound min
-int vmin = 2000; // vibration min
-int mmax = 0;    // sound max
+double m=0;
+double sum=0;
+int count=0;
+float frequency=0;
+
 void setup() {
   pinMode (2, INPUT);
   pinMode (4, INPUT);
-  Serial.begin(9600);
+  Serial.begin(57600);
+  FreqMeasure.begin();
 
   // start the Ethernet connection and the server:
   Ethernet.begin(mac);
   server.begin();
-  Serial.print("server is at ");
-  Serial.println(Ethernet.localIP());
+  Serial.print("http://");
+  Serial.println(Ethernet.localIP()); // print the ip to console
 }
 
 void loop() {
-/*
-  mVal = digitalRead(4);
-  vVal = digitalRead(2);
-  mValue = analogRead(mPin);
-  if( mValue > mmax ) { mmax = mValue; }
-  if( mValue < mmin ) { mmin = mValue; }
-  vValue = analogRead(vPin);
-  if( vValue < vmin ) { vmin = vValue; }
-  Serial.println( "Microphone: " + String(mVal) + " " + String(mmin) + "<" + String(mValue) +  "<" + String(mmax) + " Vibration " + String(vVal) + " "  + String(vmin) + "<" + String(vValue ) );
-*/
-
   // listen for incoming clients
   EthernetClient client = server.available();
   if (client) {
@@ -68,15 +56,31 @@ void loop() {
           client.println();
           client.println("<!DOCTYPE HTML>");
           client.println("<html>");
-          // output the value of each analog input pin
-          for (int analogChannel = 0; analogChannel < 6; analogChannel++) {
-            int sensorReading = analogRead(analogChannel);
-            client.print("analog input ");
-            client.print(analogChannel);
-            client.print(" is ");
-            client.print(sensorReading);
-            client.println("<br />");
+
+          Serial.print("Time: ");  
+          Serial.println(millis());
+
+          while (client.connected()) {
+            if (FreqMeasure.available()) {
+              sum = sum + FreqMeasure.read();
+              count = count + 1;
+            }
+            if( ( millis()-m ) > 1000 ) {
+              frequency = FreqMeasure.countToFrequency(sum / count);
+              sum = 0;
+              count = 0;
+            }
+            client.print(millis());
+            client.print(",");
+            client.print(frequency);
+            client.print(",");
+            client.print(analogRead(0));
+            client.print(",");
+            client.print(analogRead(1));
+            client.print(",");
+            client.println(analogRead(2));
           }
+          client.println("<br />");
           client.println("</html>");
           break;
         }
